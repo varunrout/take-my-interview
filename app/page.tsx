@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import React from "react";
 
 interface Message {
   role: "user" | "assistant";
@@ -50,13 +51,17 @@ export default function Home() {
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    if (type === "cv") {
-      setCvText(text);
-      setCvFileName(file.name);
-    } else {
-      setJdText(text);
-      setJdFileName(file.name);
+    try {
+      const text = await file.text();
+      if (type === "cv") {
+        setCvText(text);
+        setCvFileName(file.name);
+      } else {
+        setJdText(text);
+        setJdFileName(file.name);
+      }
+    } catch {
+      alert(`Failed to read file "${file.name}". Please upload a plain text file.`);
     }
   };
 
@@ -132,18 +137,36 @@ export default function Home() {
     }
   };
 
-  const formatMessage = (content: string) => {
-    // Escape HTML entities first to prevent XSS, then apply markdown-like formatting
-    const escaped = content
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-    return escaped
-      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.*?)\*/g, "<em>$1</em>")
-      .replace(/\n/g, "<br/>");
+  const parseInline = (text: string, keyPrefix: string): React.ReactNode[] => {
+    const result: React.ReactNode[] = [];
+    const regex = /\*\*(.*?)\*\*|\*(.*?)\*/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        result.push(text.slice(lastIndex, match.index));
+      }
+      if (match[1] !== undefined) {
+        result.push(<strong key={`${keyPrefix}-b-${match.index}`}>{match[1]}</strong>);
+      } else if (match[2] !== undefined) {
+        result.push(<em key={`${keyPrefix}-i-${match.index}`}>{match[2]}</em>);
+      }
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) {
+      result.push(text.slice(lastIndex));
+    }
+    return result;
+  };
+
+  const formatMessage = (content: string, msgKey: string): React.ReactNode => {
+    const lines = content.split("\n");
+    return lines.map((line, lineIdx) => (
+      <React.Fragment key={`${msgKey}-l-${lineIdx}`}>
+        {parseInline(line, `${msgKey}-${lineIdx}`)}
+        {lineIdx < lines.length - 1 && <br />}
+      </React.Fragment>
+    ));
   };
 
   return (
@@ -267,10 +290,9 @@ export default function Home() {
                     ? "bg-indigo-600 text-white rounded-tr-sm"
                     : "bg-gray-800 text-gray-100 rounded-tl-sm"
                 }`}
-                dangerouslySetInnerHTML={{
-                  __html: formatMessage(msg.content),
-                }}
-              />
+              >
+                {formatMessage(msg.content, String(idx))}
+              </div>
               {msg.role === "user" && (
                 <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm ml-2 flex-shrink-0 mt-1">
                   👤
@@ -283,8 +305,9 @@ export default function Home() {
               <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-sm mr-2 flex-shrink-0">
                 🎓
               </div>
-              <div className="bg-gray-800 px-4 py-3 rounded-2xl rounded-tl-sm">
-                <div className="flex gap-1.5 items-center h-5">
+              <div className="bg-gray-800 px-4 py-3 rounded-2xl rounded-tl-sm" aria-live="polite" aria-label="Loading response">
+                <div className="flex gap-1.5 items-center h-5" role="status">
+                  <span className="sr-only">Loading...</span>
                   <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
                   <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
                   <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />

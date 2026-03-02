@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     }
 
     const stream = await client.chat.completions.create({
-      model: "gpt-4o",
+      model: process.env.OPENAI_MODEL || "gpt-4o",
       messages: [
         { role: "system", content: systemContent },
         ...messages,
